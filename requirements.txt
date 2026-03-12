@@ -1,0 +1,14 @@
+dash==2.18.1
+numpy==1.26.4          # ← 降一级，避开 torch<2.3 对 numpy-2.x 的 ABI 不兼容
+opencv-python==4.10.0.84
+pandas==2.2.2
+Pillow==10.4.0
+plotly==5.22.0
+torch==2.3.1           # CUDA 11.8 用 cu118，12.x 用 cu121
+torchvision==0.18.1    # 与 torch2.3.1 严格对应
+parse==1.20.2
+tqdm
+scipy
+scikit-image
+matplotlib
+tensorboard
