@@ -1,53 +1,28 @@
-# TrackNetV3: Enhancing ShuttleCock Tracking with Augmentations and Trajectory Rectification
-We present TrackNetV3, a model composed of two core modules: trajectory prediction and rectification. The trajectory prediction module leverages an estimated background as auxiliary data to locate the shuttlecock in spite of the fluctuating visual interferences. This module also incorporates mixup data augmentation to formulate complex
-scenarios to strengthen the network’s robustness. Given that a shuttlecock can occasionally be obstructed, we create repair masks by analyzing the predicted trajectory, subsequently rectifying the path via inpainting.
-[[paper](https://dl.acm.org/doi/10.1145/3595916.3626370)]
+# TrackNet-promoted-version: Lightweight, Motion-Aware TrackNet for High-Speed Small Object Tracking
 
-<div align="center">
-    <a href="./">
-        <img src="./figure/NetArch.png" width="50%"/>
-    </a>
-</div>
+An improved version of [TrackNetV3](https://github.com/qaz812345/TrackNetV3) for tracking small, fast-moving objects (e.g. a badminton shuttlecock) in video. The original TrackNetV3 pipeline (tracking + trajectory rectification) is kept, and a new tracking network, **RefinedTrackNet**, is added (`refined_model.py`).
 
-## Performance 
+## What's new compared with TrackNetV3
 
-* Performance on the test split of [Shuttlecock Trajectory Dataset](https://hackmd.io/Nf8Rh1NrSrqNUzmO0sQKZw).
+| Change | Where | Motivation |
+|---|---|---|
+| **Depthwise-separable convolutions** replace the standard conv blocks in the encoder/decoder | `DSConv2DBlock`, `LightweightDoubleConv` | Cut parameters and FLOPs to raise FPS |
+| **Adaptive Motion Module**: explicit frame differences between the 3 stacked input frames, re-weighted by a learned gate | `AdaptiveMotionModule` | Suppress static background noise and reduce false positives |
+| **Improved MaSA bottleneck**: spatial attention that keeps resolution instead of mean-pooling, plus a local enhancement mask | `ImprovedMaSA` (based on `MaSA_model.py`) | Keep small-object features from being diluted |
+| Motion features fused into the bottleneck, U-Net skip connections kept | `RefinedTrackNet` | Combine appearance and motion cues |
 
-<div align="center">
-    <table>
-    <thead>
-        <tr>
-        <th>Model</th> <th>Accuracy</th> <th>Precision</th> <th>Recall</th> <th>F1</th> <th>FPS</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-        <td>YOLOv7</td> <td>57.82%</td> <td>78.53%</td> <td>59.96%</td> <td>68.00%</td> <td><b>34.77</b></td>
-        </tr>
-        <tr>
-        <td>TrackNetV2</td> <td>94.98%</td> <td><b>99.64%</b></td> <td>94.56%</td> <td>97.03%</td> <td>27.70</td>
-        </tr>
-        <tr>
-        <td>TrackNetV3</td> <td><b>97.51%</b></td> <td>97.79%</td> <td><b>99.33%</b></td> <td><b>98.56%</b></td> <td>25.11</td>
-        </tr>
-    </tbody>
-    </table>
-    </br>
-    <a href="./">
-        <img src="./figure/Comparison.png" width="80%"/>
-    </a>
-</div>
+Train it with `--model_name refined` (`--model_name TrackNet` still trains the original network). The rectification module (InpaintNet) is unchanged.
 
 ## Installation
 * Develop Environment
     ```
-    Ubuntu 16.04.7 LTS
-    Python 3.8.7
-    torch 1.10.0
+    Python 3.10
+    torch 2.3.1 (see requirements.txt)
     ```
-* Clone this reposity.
+* Clone this repository.
     ```
-    git clone https://github.com/qaz812345/TrackNetV3.git
+    git clone https://github.com/Edwads-so/TrackNet-promoted-version.git
+    cd TrackNet-promoted-version
     ```
 
 * Install the requirements.
@@ -56,7 +31,7 @@ scenarios to strengthen the network’s robustness. Given that a shuttlecock can
     ```
 
 ## Inference
-* Download the [checkpoints](https://drive.google.com/file/d/1CfzE87a0f6LhBp0kniSl1-89zaLCZ8cA/view?usp=sharing)
+* Download the original TrackNetV3 [checkpoints](https://drive.google.com/file/d/1CfzE87a0f6LhBp0kniSl1-89zaLCZ8cA/view?usp=sharing)
 * Unzip the file and place the parameter files to ```ckpts```
     ```
     unzip TrackNetV3_ckpts.zip
@@ -139,7 +114,12 @@ scenarios to strengthen the network’s robustness. Given that a shuttlecock can
     * `dataset.py` will generate the image mapping for each sample and cache the result in `.npy` files.
     * If you modify any related functions in `dataset.py`, please ensure you delete these cached files.
 ### 2. Train Tracking Module
-* Train the tracking module from scratch
+* Train the improved tracking module (RefinedTrackNet) from scratch
+    ```
+    python train.py --model_name refined --seq_len 3 --epochs 30 --batch_size 10 --save_dir exp --verbose
+    ```
+
+* Train the original TrackNetV3 tracking module from scratch
     ```
     python train.py --model_name TrackNet --seq_len 8 --epochs 30 --batch_size 10 --bg_mode concat --alpha 0.5 --save_dir exp --verbose
     ```
@@ -151,7 +131,7 @@ scenarios to strengthen the network’s robustness. Given that a shuttlecock can
 
 ### 3. Generate Predicted Trajectories and Inpainting Masks
 * Generate predicted trajectories and inpainting masks for training rectification module
-    * Noted that the coordinate range corresponds to the input spatial dimensions, not the size of the original image.
+    * Note that the coordinate range corresponds to the input spatial dimensions, not the size of the original image.
     ```
     python generate_mask_data.py --tracknet_file ckpts/TrackNet_best.pt --batch_size 16
     ```
@@ -159,7 +139,7 @@ scenarios to strengthen the network’s robustness. Given that a shuttlecock can
 ### 4. Train Rectification Module
 * Train the rectification module from scratch.
     ```
-    python train.py --model_name InpaintNet --seq_len 16 --epoch 300 --batch_size 32 --lr_scheduler StepLR --mask_ratio 0.3 --save_dir exp --verbose
+    python train.py --model_name InpaintNet --seq_len 16 --epochs 300 --batch_size 32 --lr_scheduler StepLR --mask_ratio 0.3 --save_dir exp --verbose
     ```
 
 * Resume training (start from the last epoch to the specified epoch)
@@ -216,13 +196,9 @@ scenarios to strengthen the network’s robustness. Given that a shuttlecock can
     ```
     python error_analysis.py --split test --host 127.0.0.1
     ```
-<div align="center">
-    <a href="./">
-        <img src="./figure/ErrorAnalysisUI.png" width="70%"/>
-    </a>
-</div>
 
 ## Reference
+* TrackNetV3 (base of this project): https://github.com/qaz812345/TrackNetV3 [[paper](https://dl.acm.org/doi/10.1145/3595916.3626370)]
 * TrackNetV2: https://nol.cs.nctu.edu.tw:234/open-source/TrackNetv2
 * Shuttlecock Trajectory Dataset: https://hackmd.io/@TUIK/rJkRW54cU
 * Labeling Tool: https://github.com/Chang-Chia-Chi/TrackNet-Badminton-Tracking-tensorflow2?tab=readme-ov-file#label
